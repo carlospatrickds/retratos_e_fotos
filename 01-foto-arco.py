@@ -19,15 +19,18 @@ def cm_to_px(cm, dpi):
 def make_print_image(img, target_size_px):
     return ImageOps.fit(img, target_size_px, method=Image.LANCZOS, centering=(0.5, 0.5))
 
+# Meia-lua melhorada: curva mais alta e avançada (opção C)
 def create_semicircle_mask_top(size):
     w, h = size
     mask = Image.new('L', (w, h), 255)
     draw = ImageDraw.Draw(mask)
-    bbox = (-w, -h * 2, w * 2, h)
+    # Aumenta a altura da elipse para cortar mais cabelo
+    ellipse_height = h * 2.6
+    bbox = (-w, -ellipse_height + h * 0.25, w * 2, h)
     draw.ellipse(bbox, fill=0)
     return mask
 
-def apply_mask(image, mask, background=(255,255,255)):
+def apply_mask(image, mask, background=(255,255,255)):(image, mask, background=(255,255,255)):
     bg = Image.new('RGB', image.size, background)
     result = Image.composite(image, bg, mask)
     return result
