@@ -30,7 +30,7 @@ def create_semicircle_mask_top(size):
     draw.ellipse(bbox, fill=0)
     return mask
 
-def apply_mask(image, mask, background=(255,255,255)):(image, mask, background=(255,255,255)):
+def apply_mask(image, mask, background=(255, 255, 255)):
     bg = Image.new('RGB', image.size, background)
     result = Image.composite(image, bg, mask)
     return result
@@ -41,6 +41,16 @@ zoom_factor = 1.0 if enquadramento == "Normal (A)" else 1.3
 uploaded = st.file_uploader("Faça upload da foto", type=["jpg","jpeg","png","webp","heic"], accept_multiple_files=False)
 DPI = st.slider("Resolução para impressão (DPI)", min_value=150, max_value=600, value=300, step=50)
 show_preview_mask = st.checkbox("Mostrar área 10×6 cm e simulação meia-lua", value=True)
+
+# Controle de posição vertical da área de corte
+st.subheader("Ajuste de Posição")
+ajuste_vertical = st.slider(
+    "Ajuste vertical da área de corte", 
+    min_value=-100, 
+    max_value=100, 
+    value=0,
+    help="Move a área de corte para cima (valores negativos) ou para baixo (valores positivos)"
+)
 
 if uploaded:
     try:
@@ -69,8 +79,12 @@ if uploaded:
     st.subheader("Preview 10×15 (pronto para impressão)")
     st.image(print_img, width=400)
 
+    # Aplicar ajuste vertical
     crop_x = (w_print - w_final) // 2
-    crop_y = (h_print - h_final) // 2
+    crop_y = (h_print - h_final) // 2 + ajuste_vertical
+    # Garantir que não saia dos limites
+    crop_y = max(0, min(crop_y, h_print - h_final))
+    
     crop_box = (crop_x, crop_y, crop_x + w_final, crop_y + h_final)
     crop_img = print_img.crop(crop_box)
 
@@ -79,6 +93,16 @@ if uploaded:
         mask = create_semicircle_mask_top((w_final, h_final))
         preview = apply_mask(crop_img, mask)
         st.image(preview, width=400)
+        
+        # Mostrar também a área de corte na imagem 10x15
+        st.subheader("Visualização da área de corte no 10×15")
+        img_with_crop = print_img.copy()
+        draw = ImageDraw.Draw(img_with_crop)
+        # Desenhar retângulo da área de corte
+        draw.rectangle(crop_box, outline="red", width=3)
+        # Desenhar linha do topo da meia-lua
+        draw.line([(crop_x, crop_y), (crop_x + w_final, crop_y)], fill="blue", width=2)
+        st.image(img_with_crop, width=400, caption="Área vermelha = corte 10×6 cm | Linha azul = topo da meia-lua")
 
     st.subheader("Download")
 
@@ -95,7 +119,22 @@ if uploaded:
     st.download_button("Baixar área 10×6 com meia-lua (JPEG)", buf2, "foto_10x6_meialua.jpg", "image/jpeg")
 
     st.markdown("---")
-    st.info("Dica: imprima a imagem 10×15 e recorte a área 10×6 usando a referência visual.")
+    st.info("""
+    **Dicas de uso:**
+    - Use o ajuste vertical para posicionar as cabeças corretamente abaixo da meia-lua
+    - Valores negativos movem a área de corte para **cima** (mais espaço acima das cabeças)
+    - Valores positivos movem a área de corte para **baixo** (corta mais as cabeças)
+    - Imprima a imagem 10×15 e recorte a área 10×6 usando a referência visual
+    """)
     st.caption("Desenvolvido: Foto Porta-Retrato")
 else:
-    st.info("Envie uma imagem acima para começar.")
+    st.info("""
+    **Envie uma imagem acima para começar.**
+    
+    **Instruções:**
+    1. Faça upload da foto
+    2. Escolha o enquadramento (Normal ou Close)
+    3. Ajuste a posição vertical se necessário
+    4. Visualize o resultado
+    5. Baixe os arquivos para impressão
+    """)
