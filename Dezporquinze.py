@@ -1,55 +1,57 @@
 import streamlit as st
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
 import io
 import os
-from reportlab.pdfgen import canvas
-from reportlab.lib.pagesizes import A4
-from reportlab.lib.utils import ImageReader
-from reportlab.pdfbase import pdfmetrics
-from reportlab.pdfbase.ttfonts import TTFont
 
-def cm_to_points(cm):
-    """Converte centímetros para pontos (unidade do PDF)"""
-    return cm * 28.3465
+def cm_to_pixels(cm, dpi=300):
+    """Converte centímetros para pixels considerando DPI"""
+    return int(cm * dpi / 2.54)
 
 def create_10x15_pdf(image_path, output_path):
     """Cria um PDF A4 com a imagem no formato 10x15cm centralizada"""
     
-    # Tamanhos em pontos
-    a4_width, a4_height = A4
-    img_width = cm_to_points(15)  # 15cm em pontos
-    img_height = cm_to_points(10) # 10cm em pontos
+    # DPI para alta qualidade de impressão
+    dpi = 300
+    
+    # Tamanhos em pixels
+    a4_width_px = cm_to_pixels(21, dpi)  # A4 width: 21cm
+    a4_height_px = cm_to_pixels(29.7, dpi)  # A4 height: 29.7cm
+    img_width_px = cm_to_pixels(15, dpi)  # 15cm em pixels
+    img_height_px = cm_to_pixels(10, dpi)  # 10cm em pixels
+    
+    # Criar imagem A4 em branco
+    a4_image = Image.new('RGB', (a4_width_px, a4_height_px), 'white')
+    draw = ImageDraw.Draw(a4_image)
+    
+    # Carregar e redimensionar a imagem original
+    original_image = Image.open(image_path)
+    
+    # Redimensionar mantendo a proporção para caber em 10x15cm
+    resized_image = original_image.resize((img_width_px, img_height_px), Image.LANCZOS)
     
     # Calcular posição para centralizar
-    x_pos = (a4_width - img_width) / 2
-    y_pos = (a4_height - img_height) / 2
+    x_pos = (a4_width_px - img_width_px) // 2
+    y_pos = (a4_height_px - img_height_px) // 2
     
-    # Criar PDF
-    c = canvas.Canvas(output_path, pagesize=A4)
+    # Colar a imagem redimensionada no A4
+    a4_image.paste(resized_image, (x_pos, y_pos))
     
-    # Adicionar a imagem
-    img = ImageReader(image_path)
-    c.drawImage(img, x_pos, y_pos, img_width, img_height)
-    
-    # Adicionar guias de corte (opcional)
-    c.setStrokeColorRGB(1, 0, 0)  # Vermelho
-    c.setLineWidth(0.5)
-    
-    # Linha superior
-    c.line(x_pos, y_pos + img_height, x_pos + img_width, y_pos + img_height)
-    # Linha inferior
-    c.line(x_pos, y_pos, x_pos + img_width, y_pos)
-    # Linha esquerda
-    c.line(x_pos, y_pos, x_pos, y_pos + img_height)
-    # Linha direita
-    c.line(x_pos + img_width, y_pos, x_pos + img_width, y_pos + img_height)
+    # Adicionar guias de corte (linhas vermelhas)
+    draw.line([(x_pos, y_pos), (x_pos + img_width_px, y_pos)], fill='red', width=3)
+    draw.line([(x_pos, y_pos + img_height_px), (x_pos + img_width_px, y_pos + img_height_px)], fill='red', width=3)
+    draw.line([(x_pos, y_pos), (x_pos, y_pos + img_height_px)], fill='red', width=3)
+    draw.line([(x_pos + img_width_px, y_pos), (x_pos + img_width_px, y_pos + img_height_px)], fill='red', width=3)
     
     # Adicionar texto informativo
-    c.setFillColorRGB(0, 0, 0)
-    c.setFont("Helvetica", 8)
-    c.drawString(50, 50, f"Imagem: 10x15cm - Corte nas linhas vermelhas")
+    try:
+        # Tentar usar fonte padrão, se não conseguir, não adiciona texto
+        font = ImageFont.load_default()
+        draw.text((50, 50), "Imagem 10x15cm - Corte nas linhas vermelhas", fill='black', font=font)
+    except:
+        pass
     
-    c.save()
+    # Salvar como PDF
+    a4_image.save(output_path, "PDF", resolution=dpi)
     return output_path
 
 def main():
@@ -89,7 +91,12 @@ def main():
         with col2:
             st.metric("Altura Original", f"{image.height}px")
         with col3:
-            st.metric("Formato", image.format)
+            st.metric("Formato", uploaded_file.type.split('/')[-1].upper())
+        
+        # Opções de qualidade
+        st.subheader("⚙️ Configurações")
+        quality = st.slider("Qualidade do PDF (DPI)", min_value=150, max_value=300, value=200, 
+                           help="DPI mais alto = melhor qualidade, mas arquivo maior")
         
         # Processar imagem
         if st.button("🔄 Converter para PDF 10x15cm"):
@@ -97,11 +104,29 @@ def main():
                 try:
                     # Salvar imagem temporariamente
                     temp_image_path = "temp_image.jpg"
-                    image.save(temp_image_path)
+                    
+                    # Converter para RGB se necessário (para PNG com transparência)
+                    if image.mode in ('RGBA', 'LA', 'P'):
+                        background = Image.new('RGB', image.size, 'white')
+                        if image.mode == 'P':
+                            image = image.convert('RGBA')
+                        background.paste(image, mask=image.split()[-1] if image.mode == 'RGBA' else None)
+                        image = background
+                    
+                    image.save(temp_image_path, "JPEG", quality=95)
                     
                     # Criar PDF
                     output_pdf = "imagem_10x15cm.pdf"
+                    
+                    # Atualizar DPI baseado no slider
+                    global cm_to_pixels
+                    original_cm_to_pixels = cm_to_pixels
+                    cm_to_pixels = lambda cm, dpi=quality: int(cm * dpi / 2.54)
+                    
                     pdf_path = create_10x15_pdf(temp_image_path, output_pdf)
+                    
+                    # Restaurar função original
+                    cm_to_pixels = original_cm_to_pixels
                     
                     # Ler o PDF criado
                     with open(pdf_path, "rb") as f:
@@ -124,14 +149,15 @@ def main():
                         st.info("**Dica:** Imprima em papel A4 e corte nas linhas vermelhas")
                     
                     # Preview do layout
-                    st.subheader("📐 Visualização do Layout no A4")
-                    st.markdown("""
-                    **Layout do PDF:**
-                    - Página A4 (21cm x 29.7cm)
-                    - Imagem centralizada: 10cm x 15cm
-                    - Linhas vermelhas: guias para corte
-                    - Margem superior/inferior: ≈7.35cm cada
-                    - Margem esquerda/direita: ≈3cm cada
+                    st.subheader("📐 Visualização do Layout")
+                    st.markdown(f"""
+                    **Layout do PDF (DPI: {quality}):**
+                    - **Página A4:** 21cm × 29.7cm
+                    - **Imagem:** 10cm × 15cm (centralizada)
+                    - **Linhas vermelhas:** guias para corte
+                    - **Margens:** 
+                      - Superior/Inferior: ≈7.35cm cada
+                      - Esquerda/Direita: ≈3cm cada
                     """)
                     
                     # Limpar arquivos temporários
@@ -146,11 +172,29 @@ def main():
     # Informações adicionais
     with st.expander("💡 Dicas para melhor resultado"):
         st.markdown("""
-        - **Resolução ideal:** Use imagens com pelo menos 1200x800 pixels
-        - **Proporção:** Imagens com proporção 3:2 funcionam melhor
+        - **Resolução ideal:** Use imagens com pelo menos 1200×800 pixels
+        - **Proporção:** Imagens com proporção 3:2 (15:10) funcionam melhor sem distorção
         - **Formato:** JPG ou PNG com boa qualidade
         - **Impressão:** Use papel cartão de 200-300g/m² para melhor resultado
         - **Corte:** Use estilete e régua para cortes precisos
+        - **Qualidade:** 200-300 DPI para ótima qualidade de impressão
+        """)
+        
+    with st.expander("📏 Sobre as dimensões"):
+        st.markdown("""
+        **Formato 10×15cm:**
+        - Altura: 10cm
+        - Largura: 15cm  
+        - Proporção: 3:2
+        
+        **Papel A4:**
+        - Altura: 29.7cm
+        - Largura: 21cm
+        
+        **Posicionamento:**
+        - A imagem fica centralizada no A4
+        - Margens iguais nas laterais
+        - Linhas vermelhas indicam onde cortar
         """)
 
 if __name__ == "__main__":
