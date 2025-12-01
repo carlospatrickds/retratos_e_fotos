@@ -1,68 +1,37 @@
 import streamlit as st
+import os
+import replicate
 from PIL import Image
-import torch
-import numpy as np
 import io
-from realesrgan import RealESRGAN
 
-# ----------------------------------
-# CONFIGURAÇÃO DA PÁGINA
-# ----------------------------------
-st.set_page_config(
-    page_title="Melhoria de Fotos com IA",
-    layout="centered"
-)
+# =============================
+# 1. PEGAR TOKEN DO STREAMLIT
+# =============================
+REPLICATE_API_TOKEN = st.secrets["REPLICATE_API_TOKEN"]
+os.environ["REPLICATE_API_TOKEN"] = REPLICATE_API_TOKEN
 
-st.title("🧠 Super-resolução de Fotos com IA")
-st.caption("Reconstrói detalhes e melhora fotos borradas usando inteligência artificial")
-
-# ----------------------------------
-# INICIALIZAÇÃO DO MODELO
-# ----------------------------------
-@st.cache_resource
-def carregar_modelo():
-    device = torch.device("cpu")
-    model = RealESRGAN(device, scale=2)
-    model.load_weights("RealESRGAN_x2.pth", download=True)
-    return model
-
-modelo = carregar_modelo()
-
-# ----------------------------------
-# UPLOAD
-# ----------------------------------
-uploaded_file = st.file_uploader(
-    "📷 Envie uma foto",
-    type=["jpg", "jpeg", "png"]
-)
+# =============================
+# 2. INTERFACE
+# =============================
+st.title("Melhorar Foto com IA (Replicate)")
+uploaded_file = st.file_uploader("Envie uma foto borrada", type=["jpg", "png", "jpeg"])
 
 if uploaded_file:
-    img = Image.open(uploaded_file).convert("RGB")
+    image = Image.open(uploaded_file)
+    st.image(image, caption="Original", use_column_width=True)
 
-    st.subheader("Original")
-    st.image(img, use_column_width=True)
+    st.write("🔄 Processando com IA, aguarde...")
 
-    if st.button("🚀 Melhorar com IA"):
-        with st.spinner("Processando com IA (pode demorar alguns segundos)..."):
-            img_np = np.array(img)
+    # =============================
+    # 3. CHAMADA AO MODELO DO REPLICATE
+    # =============================
+    output = replicate.run(
+        "tencentarc/gfpgan:latest",
+        input={
+            "img": uploaded_file.getvalue()
+        }
+    )
 
-            output = modelo.predict(img_np)
+    improved_url = output
 
-            img_final = Image.fromarray(output)
-
-        st.subheader("Melhorada com IA")
-        st.image(img_final, use_column_width=True)
-
-        # DOWNLOAD
-        buffer = io.BytesIO()
-        img_final.save(buffer, format="PNG")
-        buffer.seek(0)
-
-        st.download_button(
-            "⬇️ Baixar imagem melhorada",
-            data=buffer,
-            file_name="foto_melhorada_IA.png",
-            mime="image/png"
-        )
-else:
-    st.info("Envie uma imagem para iniciar o processamento.")
+    st.image(improved_url, caption="Foto Melhorada", use_column_width=True)
