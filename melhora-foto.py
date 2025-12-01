@@ -2,29 +2,129 @@ import streamlit as st
 import cv2
 import numpy as np
 from PIL import Image
+import io
 
-st.title("Melhorar qualidade de foto")
+# -------------------------------
+# CONFIGURAÇÃO DA PÁGINA
+# -------------------------------
+st.set_page_config(
+    page_title="Melhorador de Fotos",
+    layout="wide"
+)
 
-uploaded_file = st.file_uploader("Envie uma foto", type=["jpg", "jpeg", "png"])
+st.title("🖼️ Melhorador de Qualidade de Imagens")
+st.caption("Melhore fotos borradas com controles avançados (sem IA pesada)")
+
+# -------------------------------
+# FUNÇÕES DE PROCESSAMENTO
+# -------------------------------
+
+def ajustar_brilho_contraste(img, brilho=0, contraste=1.0):
+    return cv2.convertScaleAbs(img, alpha=contraste, beta=brilho)
+
+def reduzir_ruido(img, intensidade):
+    if intensidade > 0:
+        return cv2.fastNlMeansDenoisingColored(
+            img, None, intensidade, intensidade, 7, 21
+        )
+    return img
+
+def aplicar_nitidez(img, intensidade):
+    if intensidade <= 0:
+        return img
+
+    kernel = np.array([
+        [0, -1, 0],
+        [-1, 5 + intensidade, -1],
+        [0, -1, 0]
+    ])
+    return cv2.filter2D(img, -1, kernel)
+
+def aplicar_upscale(img, escala):
+    if escala == 1:
+        return img
+    altura, largura = img.shape[:2]
+    return cv2.resize(
+        img,
+        (largura * escala, altura * escala),
+        interpolation=cv2.INTER_CUBIC
+    )
+
+def processar_imagem(img, brilho, contraste, ruido, nitidez, upscale):
+    img = ajustar_brilho_contraste(img, brilho, contraste)
+    img = reduzir_ruido(img, ruido)
+    img = aplicar_nitidez(img, nitidez)
+    img = aplicar_upscale(img, upscale)
+    return img
+
+# -------------------------------
+# SIDEBAR – CONTROLES
+# -------------------------------
+st.sidebar.header("🎛️ Ajustes")
+
+brilho = st.sidebar.slider("Brilho", -100, 100, 0)
+contraste = st.sidebar.slider("Contraste", 0.5, 3.0, 1.2, 0.1)
+ruido = st.sidebar.slider("Redução de Ruído", 0, 30, 5)
+nitidez = st.sidebar.slider("Nitidez", 0, 3, 1)
+upscale = st.sidebar.selectbox("Upscale (resolução)", [1, 2, 3])
+
+# -------------------------------
+# UPLOAD DA IMAGEM
+# -------------------------------
+uploaded_file = st.file_uploader(
+    "📤 Envie uma imagem (JPG ou PNG)",
+    type=["jpg", "jpeg", "png"]
+)
 
 if uploaded_file:
-    image = Image.open(uploaded_file)
-    image_np = np.array(image)
+    try:
+        # Leitura segura
+        image = Image.open(uploaded_file).convert("RGB")
+        img_np = np.array(image)
+        img_cv = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
 
-    # Converter para OpenCV (BGR)
-    image_cv = cv2.cvtColor(image_np, cv2.COLOR_RGB2BGR)
+        # Processamento
+        img_processada = processar_imagem(
+            img_cv,
+            brilho,
+            contraste,
+            ruido,
+            nitidez,
+            upscale
+        )
 
-    # Aumentar nitidez
-    kernel = np.array([[0, -1, 0],
-                       [-1, 5, -1],
-                       [0, -1, 0]])
-    sharp = cv2.filter2D(image_cv, -1, kernel)
+        img_final = cv2.cvtColor(img_processada, cv2.COLOR_BGR2RGB)
 
-    # Voltar para RGB
-    sharp_rgb = cv2.cvtColor(sharp, cv2.COLOR_BGR2RGB)
+        # -------------------------------
+        # EXIBIÇÃO
+        # -------------------------------
+        col1, col2 = st.columns(2)
 
-    st.subheader("Antes")
-    st.image(image, use_column_width=True)
+        with col1:
+            st.subheader("📸 Original")
+            st.image(image, use_column_width=True)
 
-    st.subheader("Depois")
-    st.image(sharp_rgb, use_column_width=True)
+        with col2:
+            st.subheader("✨ Melhorada")
+            st.image(img_final, use_column_width=True)
+
+        # -------------------------------
+        # DOWNLOAD
+        # -------------------------------
+        buffer = io.BytesIO()
+        Image.fromarray(img_final).save(buffer, format="PNG")
+        buffer.seek(0)
+
+        st.download_button(
+            label="⬇️ Baixar imagem melhorada",
+            data=buffer,
+            file_name="imagem_melhorada.png",
+            mime="image/png"
+        )
+
+    except Exception as e:
+        st.error("Erro ao processar a imagem.")
+        st.exception(e)
+
+else:
+    st.info("Envie uma imagem para começar.")
