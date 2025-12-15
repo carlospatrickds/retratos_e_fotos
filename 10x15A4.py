@@ -1,25 +1,20 @@
-import streamlit as st
-from PIL import Image
-from reportlab.lib.pagesizes import A4
-from reportlab.pdfgen import canvas
-from reportlab.lib.units import mm
-import io
-import math
-#==============================
+import import streamlit as st from PIL import Image from reportlab.lib.pagesizes import A4 from reportlab.pdfgen import canvas from reportlab.lib.units import mm import io import math
 
-#Configurações iniciais
+==============================
 
-#==============================
+Configurações iniciais
+
+==============================
 
 st.set_page_config(page_title="Fotos 10x15 em A4", layout="wide") st.title("📸 Montagem de Fotos para Impressão (A4)")
 
 DPI = 300  # resolução para gráfica A4_WIDTH_MM, A4_HEIGHT_MM = 210, 297
 
-#==============================
+==============================
 
-#Funções auxiliares
+Funções auxiliares
 
-#==============================
+==============================
 
 def mm_to_px(mm, dpi=DPI): return int(mm * dpi / 25.4)
 
@@ -67,11 +62,11 @@ c.save()
 buffer.seek(0)
 return buffer
 
-#==============================
+==============================
 
-#Interface
+Interface
 
-#==============================
+==============================
 
 st.subheader("1️⃣ Envie as fotos") files = st.file_uploader( "Selecione as imagens", type=["jpg", "jpeg", "png"], accept_multiple_files=True, )
 
@@ -120,4 +115,4 @@ if st.button("🔍 Gerar pré-visualização"):
             mime="image/jpeg",
         )
 
-    st.success("Arquivos prontos para impressão em papel fotográfico (300 DPI)")
+    st.success("Arquivos prontos para impressão em papel fotográfico (300 DPI)") as st from PIL  fotográfico (300 DPI)")
