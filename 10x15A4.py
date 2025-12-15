@@ -1,5 +1,10 @@
-import streamlit as st from PIL import Image from reportlab.lib.pagesizes import A4 from reportlab.pdfgen import canvas from reportlab.lib.units import mm import io import math
-
+import streamlit as st
+from PIL import Image
+from reportlab.lib.pagesizes import A4
+from reportlab.pdfgen import canvas
+from reportlab.lib.units import mm
+import io
+import math
 ==============================
 
 Configurações iniciais
