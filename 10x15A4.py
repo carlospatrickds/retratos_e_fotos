@@ -1,118 +1,134 @@
-import import streamlit as st from PIL import Image from reportlab.lib.pagesizes import A4 from reportlab.pdfgen import canvas from reportlab.lib.units import mm import io import math
+import streamlit as st
+from PIL import Image
+from reportlab.lib.pagesizes import A4
+from reportlab.pdfgen import canvas
+import tempfile
+import os
 
-==============================
-
-Configurações iniciais
-
-==============================
-
-st.set_page_config(page_title="Fotos 10x15 em A4", layout="wide") st.title("📸 Montagem de Fotos para Impressão (A4)")
-
-DPI = 300  # resolução para gráfica A4_WIDTH_MM, A4_HEIGHT_MM = 210, 297
-
-==============================
-
-Funções auxiliares
-
-==============================
-
-def mm_to_px(mm, dpi=DPI): return int(mm * dpi / 25.4)
-
-def resize_crop(image, target_w_px, target_h_px): """Redimensiona e corta para preencher exatamente o tamanho""" img_ratio = image.width / image.height target_ratio = target_w_px / target_h_px
-
-if img_ratio > target_ratio:
-    new_height = target_h_px
-    new_width = int(new_height * img_ratio)
-else:
-    new_width = target_w_px
-    new_height = int(new_width / img_ratio)
-
-image = image.resize((new_width, new_height), Image.LANCZOS)
-
-left = (new_width - target_w_px) // 2
-top = (new_height - target_h_px) // 2
-return image.crop((left, top, left + target_w_px, top + target_h_px))
-
-def gerar_a4(imagens, layout): a4_px = Image.new( "RGB", (mm_to_px(A4_WIDTH_MM), mm_to_px(A4_HEIGHT_MM)), "white", )
-
-for img, (x_mm, y_mm, w_mm, h_mm) in zip(imagens, layout):
-    w_px = mm_to_px(w_mm)
-    h_px = mm_to_px(h_mm)
-    img = resize_crop(img, w_px, h_px)
-    a4_px.paste(img, (mm_to_px(x_mm), mm_to_px(y_mm)))
-
-return a4_px
-
-def exportar_pdf(img_a4): buffer = io.BytesIO() c = canvas.Canvas(buffer, pagesize=A4)
-
-img_buffer = io.BytesIO()
-img_a4.save(img_buffer, format="JPEG", dpi=(DPI, DPI), quality=95)
-img_buffer.seek(0)
-
-c.drawImage(
-    ImageReader(img_buffer),
-    0,
-    0,
-    width=A4_WIDTH_MM * mm,
-    height=A4_HEIGHT_MM * mm,
+# =============================
+# Configuração da página
+# =============================
+st.set_page_config(
+    page_title="Fotos 10x15 em A4",
+    layout="wide"
 )
-c.showPage()
-c.save()
 
-buffer.seek(0)
-return buffer
+st.title("📸 Montagem de Fotos 10×15 em Folha A4")
 
-==============================
+st.write(
+    "Envie suas fotos e o sistema irá montar automaticamente "
+    "**4 fotos 10×15 por folha A4**, com pré-visualização e PDF pronto para impressão."
+)
 
-Interface
+# =============================
+# Upload das imagens
+# =============================
+uploaded_files = st.file_uploader(
+    "Selecione as fotos",
+    type=["jpg", "jpeg", "png"],
+    accept_multiple_files=True
+)
 
-==============================
+if not uploaded_files:
+    st.info("📂 Envie ao menos uma foto para começar.")
+    st.stop()
 
-st.subheader("1️⃣ Envie as fotos") files = st.file_uploader( "Selecione as imagens", type=["jpg", "jpeg", "png"], accept_multiple_files=True, )
+# =============================
+# Constantes
+# =============================
+DPI = 300
 
-st.subheader("2️⃣ Escolha o layout") layout_tipo = st.selectbox( "Formato da folha A4", [ "10x15 (6 fotos por A4)", "10x15 + 5x7 (combinado)", ], )
+A4_WIDTH_CM = 21
+A4_HEIGHT_CM = 29.7
 
-if files: imagens = [Image.open(f).convert("RGB") for f in files]
+PHOTO_WIDTH_CM = 10
+PHOTO_HEIGHT_CM = 15
 
-if layout_tipo == "10x15 (6 fotos por A4)":
-    layout = [
-        (10, 10, 100, 150), (110, 10, 100, 150),
-        (10, 160, 100, 150), (110, 160, 100, 150),
-        (10, 310, 100, 150), (110, 310, 100, 150),
+def cm_to_px(cm):
+    return int((cm / 2.54) * DPI)
+
+A4_WIDTH_PX = cm_to_px(A4_WIDTH_CM)
+A4_HEIGHT_PX = cm_to_px(A4_HEIGHT_CM)
+
+PHOTO_W_PX = cm_to_px(PHOTO_WIDTH_CM)
+PHOTO_H_PX = cm_to_px(PHOTO_HEIGHT_CM)
+
+# =============================
+# Processamento das imagens
+# =============================
+processed_images = []
+
+for file in uploaded_files:
+    img = Image.open(file).convert("RGB")
+    img = img.resize((PHOTO_W_PX, PHOTO_H_PX), Image.LANCZOS)
+    processed_images.append(img)
+
+# =============================
+# Criar páginas A4 (4 fotos por página)
+# =============================
+pages = []
+
+for i in range(0, len(processed_images), 4):
+    page = Image.new("RGB", (A4_WIDTH_PX, A4_HEIGHT_PX), "white")
+    batch = processed_images[i:i + 4]
+
+    positions = [
+        (0, 0),
+        (PHOTO_W_PX, 0),
+        (0, PHOTO_H_PX),
+        (PHOTO_W_PX, PHOTO_H_PX)
     ]
-else:
-    layout = [
-        (10, 10, 100, 150), (110, 10, 100, 150),
-        (10, 160, 50, 70), (70, 160, 50, 70),
-        (130, 160, 50, 70), (10, 240, 50, 70),
-    ]
 
-total_por_folha = len(layout)
-total_folhas = math.ceil(len(imagens) / total_por_folha)
+    offset_x = (A4_WIDTH_PX - (PHOTO_W_PX * 2)) // 2
+    offset_y = (A4_HEIGHT_PX - (PHOTO_H_PX * 2)) // 2
 
-st.info(f"Serão geradas {total_folhas} folha(s) A4")
+    for img, pos in zip(batch, positions):
+        page.paste(img, (pos[0] + offset_x, pos[1] + offset_y))
 
-if st.button("🔍 Gerar pré-visualização"):
-    folhas = []
-    for i in range(total_folhas):
-        bloco = imagens[i * total_por_folha:(i + 1) * total_por_folha]
-        folha = gerar_a4(bloco, layout[: len(bloco)])
-        folhas.append(folha)
+    pages.append(page)
 
-        st.image(folha, caption=f"Prévia A4 – Página {i+1}")
+# =============================
+# Pré-visualização
+# =============================
+st.subheader("👀 Pré-visualização")
 
-    st.subheader("3️⃣ Download")
+for idx, page in enumerate(pages, start=1):
+    st.markdown(f"**Página {idx}**")
+    st.image(page, use_container_width=True)
 
-    for idx, folha in enumerate(folhas):
-        buf_jpg = io.BytesIO()
-        folha.save(buf_jpg, format="JPEG", dpi=(DPI, DPI), quality=95)
-        buf_jpg.seek(0)
+# =============================
+# Gerar PDF
+# =============================
+if st.button("📄 Gerar PDF para impressão"):
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_pdf:
+        pdf_path = tmp_pdf.name
 
-        st.download_button(
-            label=f"📥 Baixar JPEG – Página {idx+1}",
-            data=buf_jpg,
-            file_name=f"a4_fotos_{idx+1}.jpg",
-            mime="image/jpeg",
+    c = canvas.Canvas(pdf_path, pagesize=A4)
+
+    for page in pages:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp_img:
+            img_path = tmp_img.name
+            page.save(img_path, "JPEG", quality=100)
+
+        c.drawImage(
+            img_path,
+            0,
+            0,
+            width=A4[0],
+            height=A4[1]
         )
 
-    st.success("Arquivos prontos para impressão em papel fotográfico (300 DPI)") as st from PIL  fotográfico (300 DPI)")
+        c.showPage()
+        os.remove(img_path)
+
+    c.save()
+
+    with open(pdf_path, "rb") as f:
+        st.download_button(
+            label="⬇️ Baixar PDF",
+            data=f,
+            file_name="fotos_10x15_A4.pdf",
+            mime="application/pdf"
+        )
+
+    os.remove(pdf_path)
