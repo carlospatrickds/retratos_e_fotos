@@ -1,5 +1,6 @@
 import streamlit as st
-from pypdf import PdfMerger, PdfReader
+from pypdf 
+import PdfMerger, PdfReader
 import io
 
 st.set_page_config(page_title="Juntar PDFs", layout="centered")
