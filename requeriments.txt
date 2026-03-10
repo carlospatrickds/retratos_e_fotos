@@ -2,9 +2,10 @@
 streamlit>=1.30
 
 # Manipulação de PDF
-pypdf
+
 pdfplumber
 PyMuPDF
+pypdf>=4.0
 
 # Dados
 pandas>=2.0
